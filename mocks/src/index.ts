@@ -158,9 +158,20 @@ layer('db', Number(process.env.DB_PORT ?? 4002), {
   'POST /plan/apply': () => ({ applied: true, tablesMigrated: tables.length, rowsMigrated: 9650, durationMs: 4200 }),
 });
 
+// Mesmo formato da AI Layer real (POST /ai/analyze-conflict).
 layer('ai', Number(process.env.AI_PORT ?? 4001), {
-  'POST /ai/chat': (req) =>
-    aiAnswers[req.body?.conflict?.id] ?? { decision: 'DEFER', reason: 'Evidências insuficientes para este conflito.' },
+  'POST /ai/analyze-conflict': (req) => {
+    const conflictId = req.body?.conflictId;
+    const a = aiAnswers[conflictId] as
+      | { decision: 'PROPOSE'; recommendation: string; justification: string; evidence: string[] }
+      | { decision: 'DEFER'; reason: string }
+      | undefined;
+    const base = { conflictId, simulated: true, toolsUsed: [] };
+    if (a?.decision === 'PROPOSE') {
+      return { ...base, verdict: 'PROPOSE', proposal: { targetType: a.recommendation, requiresValidation: true }, reason: a.justification, evidence: { mock: { notes: a.evidence } } };
+    }
+    return { ...base, verdict: 'DEFER', proposal: null, reason: a?.reason ?? 'Evidências insuficientes para este conflito.', evidence: {} };
+  },
 });
 
 layer('data', Number(process.env.DATA_PORT ?? 4003), {

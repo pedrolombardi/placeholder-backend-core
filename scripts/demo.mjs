@@ -73,7 +73,8 @@ async function main() {
 
   const created = await call('POST', '/migrations', {
     name: 'ERP legado',
-    source: { type: 'mysql', host: 'erp-db.local', database: 'erp', user: 'demo', password: 'senha-ficticia' },
+    // Com o DB Layer real, o banco precisa ser o configurado nele: SOURCE_DATABASE=vendas.
+    source: { type: 'mysql', host: 'erp-db.local', database: process.env.SOURCE_DATABASE ?? 'erp', user: 'demo', password: 'senha-ficticia' },
     target: { type: 'oracle' },
   });
   if (created.status !== 201) throw new Error(`não foi possível criar a migração: ${JSON.stringify(created.data)}`);

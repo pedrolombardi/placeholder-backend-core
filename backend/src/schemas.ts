@@ -81,6 +81,18 @@ export const aiChatResponse = z.discriminatedUnion('decision', [
   z.object({ decision: z.literal('DEFER'), reason: z.string() }),
 ]);
 
+export type AiChatResponse = z.infer<typeof aiChatResponse>;
+
+/** Resposta real da AI Layer (Erick): POST /ai/analyze-conflict. */
+export const analyzeConflictResponse = z.object({
+  conflictId: z.string(),
+  verdict: z.enum(['PROPOSE', 'DEFER']),
+  proposal: z.object({ targetType: z.string() }).passthrough().nullable(),
+  reason: z.string(),
+  simulated: z.boolean().optional(),
+  evidence: z.record(z.unknown()).default({}),
+});
+
 // ---- Resposta do Data Layer ----
 
 export const anonymizeResponse = z.object({
