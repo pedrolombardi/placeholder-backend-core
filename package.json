@@ -1,0 +1,16 @@
+{
+  "name": "migration-orchestrator-demo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "demo": "node scripts/demo.mjs approve",
+    "demo:reject": "node scripts/demo.mjs reject",
+    "demo:invalid": "node scripts/demo.mjs invalid",
+    "demo:deferred": "node scripts/demo.mjs deferred",
+    "mocks:fail:ai": "FAIL=ai docker compose up -d mocks",
+    "mocks:fail:db": "FAIL=db docker compose up -d mocks",
+    "mocks:fail:data": "FAIL=data docker compose up -d mocks",
+    "mocks:fail:validation": "VALIDATION_FAIL=true docker compose up -d mocks",
+    "mocks:ok": "docker compose up -d mocks"
+  }
+}

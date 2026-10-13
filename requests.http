@@ -1,0 +1,53 @@
+### Roteiro de demonstração (REST Client do VS Code, ou copie para curl)
+@base = http://localhost:3000
+
+### 1. Criar migração (credenciais fictícias)
+# @name create
+POST {{base}}/migrations
+Content-Type: application/json
+
+{
+  "name": "ERP legado",
+  "source": { "type": "mysql", "host": "erp-db.local", "database": "erp", "user": "demo", "password": "senha-ficticia" },
+  "target": { "type": "oracle" }
+}
+
+###
+@id = {{create.response.body.id}}
+
+### 2. Iniciar análise (202, roda em background)
+POST {{base}}/migrations/{{id}}/analyze
+
+### 3. Consultar até WAITING_APPROVAL (proposta com os conflitos e quem decidiu cada um)
+GET {{base}}/migrations/{{id}}
+
+### 4a. Aprovar a proposta, decidindo o conflito que a IA devolveu como DEFER
+POST {{base}}/migrations/{{id}}/approve
+Content-Type: application/json
+
+{
+  "decisions": [
+    { "conflictId": "clientes.dt_cadastro", "resolution": "Converter para NULL e registrar no relatório" }
+  ]
+}
+
+### 4b. (alternativa) Aprovar sem decidir o DEFER (422, continua em WAITING_APPROVAL)
+POST {{base}}/migrations/{{id}}/approve
+
+### 4c. (alternativa) Rejeitar a proposta
+POST {{base}}/migrations/{{id}}/reject
+Content-Type: application/json
+
+{ "reason": "Mapeamento de pedidos incorreto" }
+
+### 5. Executar (202, roda em background)
+POST {{base}}/migrations/{{id}}/execute
+
+### 6. Consultar até COMPLETED
+GET {{base}}/migrations/{{id}}
+
+### 7. Trilha de auditoria
+GET {{base}}/migrations/{{id}}/events
+
+### Transição inválida (409): executar sem aprovação (rode logo após o passo 1)
+POST {{base}}/migrations/{{id}}/execute

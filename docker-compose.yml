@@ -1,0 +1,44 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+      POSTGRES_DB: migrations
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d migrations"]
+      interval: 2s
+      retries: 15
+
+  mocks:
+    build: ./mocks
+    environment:
+      FAIL: ${FAIL:-}
+      VALIDATION_FAIL: ${VALIDATION_FAIL:-false}
+      MOCK_DELAY_MS: 500
+    ports:
+      - "4001:4001"
+      - "4002:4002"
+      - "4003:4003"
+
+  backend:
+    build: ./backend
+    environment:
+      PORT: 3000
+      DATABASE_URL: postgres://app:app@postgres:5432/migrations
+      AI_LAYER_URL: http://mocks:4001
+      DB_LAYER_URL: http://mocks:4002
+      DATA_LAYER_URL: http://mocks:4003
+      HTTP_TIMEOUT_MS: 3000
+      HTTP_RETRIES: 2
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mocks:
+        condition: service_started
