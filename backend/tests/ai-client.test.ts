@@ -67,6 +67,11 @@ test('DEFER preserva o motivo', async () => {
   expect(await call()).toEqual({ decision: 'DEFER', reason: 'valores alem de 0 e 1' });
 });
 
+test('erro 4xx traz a explicacao do layer, nao so o status', async () => {
+  respond({ code: 'CONNECTION_MISMATCH', error: 'origem configurada e vendas, nao erp' }, 400);
+  await expect(call()).rejects.toThrow('ai-layer: HTTP 400: origem configurada e vendas, nao erp');
+});
+
 test('resposta fora do contrato falha alto (INVALID_RESPONSE), sem retry', async () => {
   const fetchMock = respond({ decision: 'PROPOSE' });
   await expect(call()).rejects.toMatchObject({ reason: 'INVALID_RESPONSE' });

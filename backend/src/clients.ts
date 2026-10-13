@@ -33,6 +33,16 @@ export class ServiceCallError extends Error {
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Explicacao que o layer devolveu no corpo do erro: `{ error }` (DB Layer, AI Layer)
+ * ou RFC 9457 `{ title, detail }` (Data Layer). Sem isto o usuario so ve "HTTP 400".
+ */
+async function errorReason(res: Response): Promise<string> {
+  const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+  const reason = body && [body.error, body.detail, body.title, body.code].find((v) => typeof v === 'string' && v.length > 0);
+  return reason ? `HTTP ${res.status}: ${String(reason).slice(0, 300)}` : `HTTP ${res.status}`;
+}
+
+/**
  * Chamada HTTP com timeout, retry (erro de rede, timeout ou 5xx) e validação da resposta.
  * O body não é logado porque pode conter credenciais de conexão.
  */
@@ -60,7 +70,7 @@ export async function httpCall<T>(
         lastError = new ServiceCallError(service, 'UNAVAILABLE', `HTTP ${res.status}`);
       } else if (!res.ok) {
         // 4xx: repetir não resolve.
-        throw new ServiceCallError(service, 'BAD_REQUEST', `HTTP ${res.status}`);
+        throw new ServiceCallError(service, 'BAD_REQUEST', await errorReason(res));
       } else {
         const parsed = schema.safeParse(await res.json());
         if (!parsed.success) {
