@@ -1,6 +1,6 @@
 # Backend Core — orquestrador de migração (protótipo)
 
-O Backend Core recebe as requisições do Front-end e as valida com Zod. Ele controla o estado da migração no PostgreSQL e aciona DB Layer, AI Layer e Data Layer na ordem de cada operação, sem executar tarefas especializadas. Neste protótipo ele **não está integrado** aos outros layers: os três são **mocks HTTP** com respostas fixas, nos contratos descritos no documento da Fase 6.
+O Backend Core recebe as requisições do Front-end e as valida com Zod. Ele controla o estado da migração no PostgreSQL e aciona DB Layer, AI Layer e Data Layer na ordem de cada operação, sem executar tarefas especializadas. Os layers podem rodar como **mocks HTTP** (padrão, respostas fixas) ou **reais**: DB Layer e AI Layer já estão integrados (ver "Integração com os layers reais"). O Data Layer ainda é mock.
 
 ```
 Front-end ──HTTP──▶ Backend Core (Express) ──▶ DB Layer   :4002 (mock)
@@ -70,11 +70,11 @@ O que o Backend chama em cada layer. Os mocks em [`mocks/src/index.ts`](mocks/sr
 | Layer | Chamada | Origem do contrato |
 | --- | --- | --- |
 | DB Layer | `POST /connections/test` | documento da Fase 6 |
-| DB Layer | `GET /schema/introspect?connection=source` | documento; o parâmetro `connection` é suposição |
+| DB Layer | `GET /schema/introspect?connection=source` | documento; o DB Layer real aceita `connection` e `side` |
 | DB Layer | `POST /schema/diff` | documento |
 | DB Layer | `POST /validate/plan` | documento |
 | DB Layer | `POST /plan/apply` | **suposição**: o documento não define o endpoint de escrita no destino |
-| AI Layer | `POST /ai/chat` | documento |
+| AI Layer | `POST /ai/analyze-conflict` | contrato real da AI Layer (o documento citava `/ai/chat`, que é o chat livre) |
 | Data Layer | `POST /anonymize` | **suposição**: o documento não nomeia o endpoint |
 
 O formato dos corpos JSON (em [`backend/src/schemas.ts`](backend/src/schemas.ts)) também é suposição, a confirmar com os responsáveis por cada layer na integração.
@@ -121,5 +121,5 @@ Esses scripts recriam o container dos mocks com `FAIL=ai|db|data` ou `VALIDATION
 | `schemas.ts`      | contratos Zod das requisições e das respostas dos layers; formato da proposta |
 | `service.ts`      | casos de uso, máquina de estados, regra do `DEFER` e eventos de auditoria |
 | `orchestrator.ts` | ordem das chamadas aos layers e montagem da proposta; qualquer erro leva a migração a `FAILED` |
-| `clients.ts`      | clientes dos três layers, com timeout (3s) e até 2 retries em erro de rede, timeout ou 5xx |
+| `clients.ts`      | clientes dos três layers, com timeout (3s) e até 2 retries em erro de rede, timeout ou 5xx; traduz a resposta da AI Layer para o formato do orchestrator |
 | `repository.ts`   | queries no PostgreSQL                                                         |
