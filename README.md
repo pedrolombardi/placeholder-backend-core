@@ -46,8 +46,8 @@ cd backend && npm install && npm test
 | --- | --- |
 | Análise (`ANALYZING`) | DB Layer testa as conexões, lê a estrutura da origem e classifica os conflitos. Os mecânicos saem resolvidos por regra; cada conflito de julgamento vai para a AI Layer, que responde `PROPOSE` (com evidência) ou `DEFER`. |
 | Homologação (`WAITING_APPROVAL`) | O usuário aprova ou rejeita. Conflito em `DEFER` exige uma decisão humana no corpo do `approve`; sem ela a resposta é `422`. |
-| Execução (`EXECUTING`) | Data Layer gera o dataset anonimizado do sandbox. |
-| Validação (`VALIDATING`) | DB Layer executa o plano no sandbox e devolve as verificações. Reprovou: `FAILED`, sem escrita no destino. Aprovou: o plano é aplicado no destino e a migração vai a `COMPLETED`. |
+| Execução (`EXECUTING`) | DB Layer extrai a amostra da origem e o Data Layer a anonimiza (sandbox). |
+| Validação (`VALIDATING`) | DB Layer carrega o dataset anonimizado num schema SANDBOX nos tipos do plano e roda as verificações. Reprovou: `FAILED`, sem escrita no destino. Aprovou: o DB Layer real gera o **script de migração** (`PLAN_SCRIPT_READY`) e a migração vai a `COMPLETED`; com os mocks, o plano é dado como aplicado (`PLAN_APPLIED`). |
 
 | Endpoint | O que faz |
 | --- | --- |
@@ -61,7 +61,7 @@ cd backend && npm install && npm test
 
 Respostas de erro: `400` dados inválidos ou conflito inexistente, `404` migração não encontrada, `409` transição inválida (por exemplo, executar sem aprovação), `422` decisão humana pendente.
 
-Na proposta, cada conflito traz `decidedBy` (`rule`, `ai` ou `human`) e `status` (`RESOLVED` ou `DEFERRED`). Além das mudanças de status, a auditoria grava `PROPOSAL_CREATED`, `PROPOSAL_APPROVED` (com as decisões humanas), `PROPOSAL_REJECTED`, `SANDBOX_READY`, `PLAN_VALIDATED`, `PLAN_APPLIED`, `MIGRATION_COMPLETED` e `MIGRATION_FAILED`.
+Na proposta, cada conflito traz `decidedBy` (`rule`, `ai` ou `human`) e `status` (`RESOLVED` ou `DEFERRED`). Além das mudanças de status, a auditoria grava `PROPOSAL_CREATED`, `PROPOSAL_APPROVED` (com as decisões humanas), `PROPOSAL_REJECTED`, `SANDBOX_READY`, `PLAN_VALIDATED`, `PLAN_SCRIPT_READY` (DB Layer real) ou `PLAN_APPLIED` (mocks), `MIGRATION_COMPLETED` e `MIGRATION_FAILED`.
 
 ## Contratos dos layers
 
@@ -80,24 +80,12 @@ O que o Backend chama em cada layer. Os mocks em [`mocks/src/index.ts`](mocks/sr
 
 O formato dos corpos JSON (em [`backend/src/schemas.ts`](backend/src/schemas.ts)) também é suposição, a confirmar com os responsáveis por cada layer na integração.
 
-## Integração com os layers reais (branch `integracao`)
+## Plataforma completa (layers reais)
 
-DB Layer e AI Layer reais; Data Layer continua mock. Suba antes:
-- DB Layer: `pedrolombardi/db-layer` → `docker compose up` (porta 3002, MySQL e Oracle com as cargas de conflito)
-- AI Layer: `pedrolombardi/placeholder-ai-layer` (branch `integracao`) → `npm install` e `npm run dev` (porta 3001)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.integracao.yml up --build
-SOURCE_DATABASE=vendas npm run demo          # PowerShell: $env:SOURCE_DATABASE='vendas'; npm run demo
-```
-
-Resultado validado: `3 tabelas e 20 conflitos: 15 resolvidos por regra, 1 proposto pela IA, 4 aguardando decisão humana`, com evidência real da IA (ex.: `clientes.email`: 2 de 10 valores acima de 200 bytes, máximo 226).
-A execução termina em `FAILED: db-layer: HTTP 501`: `/validate/plan` é Fase 7 do DB Layer.
-
-O que mudou para integrar:
-- `clients.ts`: `aiLayer.chat` chama `POST /ai/analyze-conflict` (contrato real da AI Layer) e traduz a resposta para o formato que o orchestrator já usa. Orchestrator e testes não mudaram.
-- `mocks`: o mock da IA responde no formato do `/ai/analyze-conflict`.
-- `scripts/demo.mjs`: `SOURCE_DATABASE` escolhe o banco da origem. O DB Layer real recusa (400) banco diferente do configurado nele.
+Com os mocks, o Core roda sozinho, como acima. Com **todos os layers reais** (DB Layer, AI Layer,
+Data Layer, bancos de demonstração e front-end), use o repositório
+[`placeholder-platform`](https://github.com/pedrolombardi/placeholder-platform): um
+`docker compose up --build` e o teste ponta a ponta (`npm run e2e`).
 
 ## Simular falhas
 
@@ -111,7 +99,7 @@ npm run mocks:fail:validation  # plano reprovado no sandbox → FAILED, sem escr
 npm run mocks:ok               # volta ao normal
 ```
 
-Esses scripts recriam o container dos mocks com `FAIL=ai|db|data` ou `VALIDATION_FAIL=true` (por exemplo, `FAIL=ai docker compose up -d mocks`).
+Esses scripts (`scripts/mocks.mjs`, funcionam também no PowerShell) recriam o container dos mocks com `FAIL=ai|db|data` ou `VALIDATION_FAIL=true`.
 
 ## Código (`backend/src`)
 

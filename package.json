@@ -7,10 +7,10 @@
     "demo:reject": "node scripts/demo.mjs reject",
     "demo:invalid": "node scripts/demo.mjs invalid",
     "demo:deferred": "node scripts/demo.mjs deferred",
-    "mocks:fail:ai": "FAIL=ai docker compose up -d mocks",
-    "mocks:fail:db": "FAIL=db docker compose up -d mocks",
-    "mocks:fail:data": "FAIL=data docker compose up -d mocks",
-    "mocks:fail:validation": "VALIDATION_FAIL=true docker compose up -d mocks",
-    "mocks:ok": "docker compose up -d mocks"
+    "mocks:fail:ai": "node scripts/mocks.mjs ai",
+    "mocks:fail:db": "node scripts/mocks.mjs db",
+    "mocks:fail:data": "node scripts/mocks.mjs data",
+    "mocks:fail:validation": "node scripts/mocks.mjs validation",
+    "mocks:ok": "node scripts/mocks.mjs ok"
   }
 }

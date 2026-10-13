@@ -6,7 +6,7 @@ services:
       POSTGRES_PASSWORD: app
       POSTGRES_DB: migrations
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     healthcheck:
@@ -21,9 +21,9 @@ services:
       VALIDATION_FAIL: ${VALIDATION_FAIL:-false}
       MOCK_DELAY_MS: 500
     ports:
-      - "4001:4001"
-      - "4002:4002"
-      - "4003:4003"
+      - "127.0.0.1:4001:4001"
+      - "127.0.0.1:4002:4002"
+      - "127.0.0.1:4003:4003"
 
   backend:
     build: ./backend
@@ -36,7 +36,7 @@ services:
       HTTP_TIMEOUT_MS: 3000
       HTTP_RETRIES: 2
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
