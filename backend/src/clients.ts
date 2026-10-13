@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { logger } from './logger';
 import {
-  aiChatResponse,
+  AiChatResponse,
+  analyzeConflictResponse,
   anonymizeResponse,
   applyPlanResponse,
+  Conflict,
   connectionTestResponse,
   diffResponse,
   introspectResponse,
@@ -97,9 +99,40 @@ export const dbLayer = {
     post('db-layer', `${DB_LAYER_URL}/plan/apply`, body, applyPlanResponse),
 };
 
+/** Evidencia da AI Layer em linhas legiveis, sem os campos de identificacao. */
+function summarizeEvidence(evidence: Record<string, unknown>, simulated?: boolean): string[] {
+  const skip = new Set(['status', 'simulated', 'database', 'side', 'table', 'column']);
+  return Object.entries(evidence).map(([tool, data]) => {
+    const fields = Object.entries((data ?? {}) as Record<string, unknown>)
+      .filter(([k]) => !skip.has(k))
+      .map(([k, v]) => `${k}=${JSON.stringify(v)}`);
+    return `${simulated ? '(simulado) ' : ''}${tool}: ${fields.join(', ')}`;
+  });
+}
+
+/**
+ * A AI Layer real expoe POST /ai/analyze-conflict ({ verdict, proposal, reason, evidence }).
+ * A resposta e traduzida para o formato que o orchestrator ja usa (decision PROPOSE | DEFER),
+ * por isso o nome `chat` e a assinatura continuam os mesmos.
+ */
 export const aiLayer = {
-  chat: (body: { conflict: unknown; source: { type: unknown }; target: { type: unknown } }) =>
-    post('ai-layer', `${AI_LAYER_URL}/ai/chat`, body, aiChatResponse),
+  chat: async (body: { conflict: Conflict; source: { type: unknown }; target: { type: unknown } }): Promise<AiChatResponse> => {
+    const { conflict } = body;
+    const r = await post('ai-layer', `${AI_LAYER_URL}/ai/analyze-conflict`, {
+      conflictId: conflict.id,
+      table: conflict.table,
+      column: conflict.column,
+      source: { database: String(body.source.type), type: conflict.sourceType },
+      target: { database: String(body.target.type), type: conflict.targetType },
+    }, analyzeConflictResponse);
+    if (r.verdict === 'DEFER') return { decision: 'DEFER', reason: r.reason };
+    return {
+      decision: 'PROPOSE',
+      recommendation: r.proposal ? `Usar ${r.proposal.targetType}` : r.reason,
+      justification: r.reason,
+      evidence: summarizeEvidence(r.evidence, r.simulated),
+    };
+  },
 };
 
 export const dataLayer = {

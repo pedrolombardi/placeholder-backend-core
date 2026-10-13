@@ -79,6 +79,25 @@ O que o Backend chama em cada layer. Os mocks em [`mocks/src/index.ts`](mocks/sr
 
 O formato dos corpos JSON (em [`backend/src/schemas.ts`](backend/src/schemas.ts)) também é suposição, a confirmar com os responsáveis por cada layer na integração.
 
+## Integração com os layers reais (branch `integracao`)
+
+DB Layer e AI Layer reais; Data Layer continua mock. Suba antes:
+- DB Layer: `pedrolombardi/db-layer` → `docker compose up` (porta 3002, MySQL e Oracle com as cargas de conflito)
+- AI Layer: `pedrolombardi/placeholder-ai-layer` (branch `integracao`) → `npm install` e `npm run dev` (porta 3001)
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.integracao.yml up --build
+SOURCE_DATABASE=vendas npm run demo          # PowerShell: $env:SOURCE_DATABASE='vendas'; npm run demo
+```
+
+Resultado validado: `3 tabelas e 20 conflitos: 15 resolvidos por regra, 1 proposto pela IA, 4 aguardando decisão humana`, com evidência real da IA (ex.: `clientes.email`: 2 de 10 valores acima de 200 bytes, máximo 226).
+A execução termina em `FAILED: db-layer: HTTP 501`: `/validate/plan` é Fase 7 do DB Layer.
+
+O que mudou para integrar:
+- `clients.ts`: `aiLayer.chat` chama `POST /ai/analyze-conflict` (contrato real da AI Layer) e traduz a resposta para o formato que o orchestrator já usa. Orchestrator e testes não mudaram.
+- `mocks`: o mock da IA responde no formato do `/ai/analyze-conflict`.
+- `scripts/demo.mjs`: `SOURCE_DATABASE` escolhe o banco da origem. O DB Layer real recusa (400) banco diferente do configurado nele.
+
 ## Simular falhas
 
 Troque o modo dos mocks e rode `npm run demo` de novo:
