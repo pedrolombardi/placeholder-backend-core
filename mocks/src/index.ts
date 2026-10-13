@@ -155,6 +155,18 @@ layer('db', Number(process.env.DB_PORT ?? 4002), {
           ],
           issues: [],
         },
+  'POST /extract/sample': () => ({
+    dataset: {
+      tables: [
+        {
+          name: 'clientes',
+          columns: [{ name: 'id', type: 'integer', nullable: false, pk: true }, { name: 'nome', type: 'string', nullable: false }],
+          rows: [[1, 'Ana'], [2, 'Bruno']],
+        },
+      ],
+    },
+    options: { preserve: [] },
+  }),
   'POST /plan/apply': () => ({ applied: true, tablesMigrated: tables.length, rowsMigrated: 9650, durationMs: 4200 }),
 });
 
@@ -174,13 +186,15 @@ layer('ai', Number(process.env.AI_PORT ?? 4001), {
   },
 });
 
+// Mesmo formato do Data Layer real (POST /v1/anonymize).
 layer('data', Number(process.env.DATA_PORT ?? 4003), {
-  'POST /anonymize': () => ({
-    datasetId: 'sandbox-0001',
-    tables: [
-      { name: 'clientes', rows: 1200, anonymizedColumns: ['nome', 'cpf'] },
-      { name: 'pedidos', rows: 8450, anonymizedColumns: [] },
-    ],
-    fidelity: 0.97,
+  'POST /v1/anonymize': (req) => ({
+    run_id: 'sandbox-0001',
+    dataset: req.body?.dataset ?? { tables: [] },
+    report: {
+      verdict: 'pass',
+      columns: [{ column: 'clientes.nome', strategy: 'resample_name', total_variation_distance: 0.03 }],
+      checks: [{ check: 'leakage', verdict: 'pass' }, { check: 'referential', verdict: 'pass' }],
+    },
   }),
 });

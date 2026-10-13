@@ -73,10 +73,11 @@ export async function runExecution(id: string): Promise<void> {
     const plan = m.proposal as Proposal;
 
     const sandbox = await dataLayer.anonymize({ source: m.source, tables: plan.tables.map((t) => t.name) });
-    await recordEvent(id, 'SANDBOX_READY', { datasetId: sandbox.datasetId, fidelity: sandbox.fidelity });
+    const { dataset, ...sandboxSummary } = sandbox;
+    await recordEvent(id, 'SANDBOX_READY', sandboxSummary);
 
     await changeStatus(id, 'VALIDATING');
-    const validation = await dbLayer.validatePlan({ target: m.target, plan, datasetId: sandbox.datasetId });
+    const validation = await dbLayer.validatePlan({ target: m.target, plan, datasetId: sandbox.datasetId, dataset });
 
     // Resposta válida no formato não significa plano aprovado: reprovou, nada é escrito no destino.
     if (!validation.valid) {
@@ -85,10 +86,12 @@ export async function runExecution(id: string): Promise<void> {
     await recordEvent(id, 'PLAN_VALIDATED', { checks: validation.checks });
 
     const apply = await dbLayer.applyPlan({ source: m.source, target: m.target, plan });
-    if (!apply.applied) throw new Error('DB Layer não aplicou o plano no destino');
-    await recordEvent(id, 'PLAN_APPLIED', { rowsMigrated: apply.rowsMigrated });
+    // DB Layer real: gera o script de migracao (mode "script") em vez de escrever no destino.
+    if (!apply.applied && apply.mode !== 'script') throw new Error('DB Layer não aplicou o plano no destino');
+    if (apply.applied) await recordEvent(id, 'PLAN_APPLIED', { rowsMigrated: apply.rowsMigrated });
+    else await recordEvent(id, 'PLAN_SCRIPT_READY', { statements: apply.statements });
 
-    await changeStatus(id, 'COMPLETED', { result: { sandbox, validation, apply } });
+    await changeStatus(id, 'COMPLETED', { result: { sandbox: sandboxSummary, validation, apply } });
     logger.info({ migrationId: id }, 'execution finished');
   } catch (err) {
     await markFailed(id, err);

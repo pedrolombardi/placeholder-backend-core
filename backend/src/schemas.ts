@@ -57,13 +57,20 @@ export const diffResponse = z.object({ conflicts: z.array(conflict) });
 
 const validationChecks = {
   valid: z.boolean(),
-  checks: z.array(z.object({ name: z.string(), passed: z.boolean() })),
+  checks: z.array(z.object({ name: z.string(), passed: z.boolean(), detail: z.string().optional() })),
   issues: z.array(z.string()).default([]),
 };
 export const validatePlanResponse = z.object(validationChecks);
 
+/**
+ * DB Layer real: `applied: false, mode: "script"` = plano validado e script de
+ * migracao gerado para o DBA (o DB Layer nao escreve no destino).
+ */
 export const applyPlanResponse = z.object({
   applied: z.boolean(),
+  mode: z.string().optional(),
+  script: z.string().optional(),
+  statements: z.number().optional(),
   tablesMigrated: z.number(),
   rowsMigrated: z.number(),
   durationMs: z.number(),
@@ -99,6 +106,43 @@ export const anonymizeResponse = z.object({
   datasetId: z.string(),
   tables: z.array(z.object({ name: z.string(), rows: z.number(), anonymizedColumns: z.array(z.string()) })),
   fidelity: z.number(),
+  verdict: z.string().optional(),
+  /** dataset anonimizado: vai para a validacao no sandbox do DB Layer */
+  dataset: z.unknown().optional(),
+});
+export type AnonymizeResult = z.infer<typeof anonymizeResponse>;
+
+const wireDataset = z.object({
+  tables: z.array(
+    z
+      .object({
+        name: z.string(),
+        columns: z.array(z.object({ name: z.string() }).passthrough()),
+        rows: z.array(z.array(z.unknown())),
+      })
+      .passthrough(),
+  ),
+});
+
+/** DB Layer: POST /extract/sample (ja no formato de entrada do Data Layer). */
+export const extractResponse = z.object({
+  dataset: wireDataset,
+  options: z.object({ preserve: z.array(z.string()) }).passthrough(),
+});
+
+/** Data Layer real: POST /v1/anonymize. */
+export const dataLayerAnonymizeResponse = z.object({
+  run_id: z.string(),
+  dataset: wireDataset,
+  report: z
+    .object({
+      verdict: z.enum(['pass', 'warn', 'fail']),
+      columns: z.array(
+        z.object({ column: z.string(), strategy: z.string(), total_variation_distance: z.number().nullable().optional() }).passthrough(),
+      ),
+      checks: z.array(z.object({ check: z.string(), verdict: z.string() }).passthrough()),
+    })
+    .passthrough(),
 });
 
 // ---- Proposta consolidada pelo Backend ----

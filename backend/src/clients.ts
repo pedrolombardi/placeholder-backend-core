@@ -3,7 +3,9 @@ import { logger } from './logger';
 import {
   AiChatResponse,
   analyzeConflictResponse,
-  anonymizeResponse,
+  AnonymizeResult,
+  dataLayerAnonymizeResponse,
+  extractResponse,
   applyPlanResponse,
   Conflict,
   connectionTestResponse,
@@ -93,7 +95,7 @@ export const dbLayer = {
     httpCall('db-layer', 'GET', `${DB_LAYER_URL}/schema/introspect?connection=${connection}`, undefined, introspectResponse),
   diff: (body: { source: object; target: object }) =>
     post('db-layer', `${DB_LAYER_URL}/schema/diff`, body, diffResponse),
-  validatePlan: (body: { target: object; plan: unknown; datasetId: string }) =>
+  validatePlan: (body: { target: object; plan: unknown; datasetId: string; dataset?: unknown }) =>
     post('db-layer', `${DB_LAYER_URL}/validate/plan`, body, validatePlanResponse),
   applyPlan: (body: { source: object; target: object; plan: unknown }) =>
     post('db-layer', `${DB_LAYER_URL}/plan/apply`, body, applyPlanResponse),
@@ -135,7 +137,34 @@ export const aiLayer = {
   },
 };
 
+/**
+ * Sandbox anonimizado: o DB Layer extrai a amostra da origem (unico com acesso
+ * de leitura) ja no formato do Data Layer, e o Data Layer anonimiza.
+ * O dataset anonimizado segue para a validacao no sandbox do DB Layer.
+ */
 export const dataLayer = {
-  anonymize: (body: { source: object; tables: string[] }) =>
-    post('data-layer', `${DATA_LAYER_URL}/anonymize`, body, anonymizeResponse),
+  anonymize: async (body: { source: object; tables: string[] }): Promise<AnonymizeResult> => {
+    const request = await post('db-layer', `${DB_LAYER_URL}/extract/sample`, body, extractResponse);
+    const r = await post('data-layer', `${DATA_LAYER_URL}/v1/anonymize`, request, dataLayerAnonymizeResponse);
+    if (r.report.verdict === 'fail') {
+      const failed = r.report.checks.filter((c) => c.verdict === 'fail').map((c) => c.check);
+      throw new Error(`Data Layer reprovou a anonimizacao: ${failed.join(', ') || 'sem detalhes'}`);
+    }
+    const tvds = r.report.columns
+      .map((c) => c.total_variation_distance)
+      .filter((v): v is number => typeof v === 'number');
+    return {
+      datasetId: r.run_id,
+      tables: r.dataset.tables.map((t) => ({
+        name: t.name,
+        rows: t.rows.length,
+        anonymizedColumns: r.report.columns
+          .filter((c) => c.column.startsWith(`${t.name}.`) && c.strategy !== 'keep')
+          .map((c) => c.column.slice(t.name.length + 1)),
+      })),
+      fidelity: tvds.length > 0 ? Number((1 - tvds.reduce((a, b) => a + b, 0) / tvds.length).toFixed(4)) : 1,
+      verdict: r.report.verdict,
+      dataset: r.dataset,
+    };
+  },
 };

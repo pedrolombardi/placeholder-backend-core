@@ -1,6 +1,6 @@
 # Backend Core — orquestrador de migração (protótipo)
 
-O Backend Core recebe as requisições do Front-end e as valida com Zod. Ele controla o estado da migração no PostgreSQL e aciona DB Layer, AI Layer e Data Layer na ordem de cada operação, sem executar tarefas especializadas. Os layers podem rodar como **mocks HTTP** (padrão, respostas fixas) ou **reais**: DB Layer e AI Layer já estão integrados (ver "Integração com os layers reais"). O Data Layer ainda é mock.
+O Backend Core recebe as requisições do Front-end e as valida com Zod. Ele controla o estado da migração no PostgreSQL e aciona DB Layer, AI Layer e Data Layer na ordem de cada operação, sem executar tarefas especializadas. Os layers podem rodar como **mocks HTTP** (padrão, respostas fixas) ou **reais**: DB Layer e AI Layer já estão integrados (ver "Integração com os layers reais"). Com o Data Layer real, a execução também fica real. A plataforma completa (todos os serviços + front) sobe pelo repositório `placeholder-platform`.
 
 ```
 Front-end ──HTTP──▶ Backend Core (Express) ──▶ DB Layer   :4002 (mock)
@@ -72,10 +72,11 @@ O que o Backend chama em cada layer. Os mocks em [`mocks/src/index.ts`](mocks/sr
 | DB Layer | `POST /connections/test` | documento da Fase 6 |
 | DB Layer | `GET /schema/introspect?connection=source` | documento; o DB Layer real aceita `connection` e `side` |
 | DB Layer | `POST /schema/diff` | documento |
-| DB Layer | `POST /validate/plan` | documento |
-| DB Layer | `POST /plan/apply` | **suposição**: o documento não define o endpoint de escrita no destino |
+| DB Layer | `POST /extract/sample` | amostra da origem no formato do Data Layer |
+| DB Layer | `POST /validate/plan` | documento; o DB Layer real carrega o dataset anonimizado no schema SANDBOX e roda as 5 verificações |
+| DB Layer | `POST /plan/apply` | o DB Layer real **gera o script de migração** (`applied: false`, `mode: "script"`) e não escreve no destino |
 | AI Layer | `POST /ai/analyze-conflict` | contrato real da AI Layer (o documento citava `/ai/chat`, que é o chat livre) |
-| Data Layer | `POST /anonymize` | **suposição**: o documento não nomeia o endpoint |
+| Data Layer | `POST /v1/anonymize` | contrato real do Data Layer (recebe as linhas extraídas pelo DB Layer) |
 
 O formato dos corpos JSON (em [`backend/src/schemas.ts`](backend/src/schemas.ts)) também é suposição, a confirmar com os responsáveis por cada layer na integração.
 

@@ -94,6 +94,23 @@ test('fluxo feliz: criar → analisar → aprovar → executar → concluir', as
   );
 });
 
+test('DB Layer real: plano validado vira script de migracao (mode script) e a migracao completa', async () => {
+  jest.mocked(dbLayer.applyPlan).mockResolvedValue({
+    applied: false, mode: 'script', script: 'ALTER TABLE ...;', statements: 1, tablesMigrated: 3, rowsMigrated: 0, durationMs: 50,
+  });
+  const { id } = await service.createMigration(input);
+  await service.startAnalysis(id);
+  await runAnalysis(id);
+  await service.approve(id);
+  await service.startExecution(id);
+  await runExecution(id);
+  const m = await service.getMigration(id);
+  expect(m.status).toBe('COMPLETED');
+  expect(m.result).toMatchObject({ apply: { mode: 'script', script: 'ALTER TABLE ...;' } });
+  expect(eventTypes(id)).toEqual(expect.arrayContaining(['PLAN_SCRIPT_READY', 'MIGRATION_COMPLETED']));
+  expect(eventTypes(id)).not.toContain('PLAN_APPLIED');
+});
+
 test('transição inválida: aprovar uma migração em CREATED retorna 409', async () => {
   const { id } = await service.createMigration(input);
 
