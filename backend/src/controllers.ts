@@ -3,7 +3,8 @@ import * as auth from './auth';
 import { computeMetrics } from './metrics';
 import * as orchestrator from './orchestrator';
 import * as repo from './repository';
-import { approveSchema, createMigrationSchema, loginSchema, rejectSchema } from './schemas';
+import * as connections from './connections';
+import { approveSchema, createConnectionSchema, createMigrationSchema, loginSchema, rejectSchema } from './schemas';
 import * as service from './service';
 
 type Params = { id: string };
@@ -63,6 +64,39 @@ export async function execute(req: Request<Params>, res: Response) {
   const migration = await service.startExecution(req.params.id, actor(req));
   void orchestrator.runExecution(migration.id);
   res.status(202).json({ id: migration.id, status: migration.status });
+}
+
+export async function script(req: Request<Params>, res: Response) {
+  const body = await service.migrationScript(req.params.id);
+  // O id já passou pela busca no banco (UUID): o nome do arquivo não precisa de escape.
+  res
+    .type('text/plain; charset=utf-8')
+    .set('Content-Disposition', `attachment; filename="migracao-${req.params.id.slice(0, 8)}.sql"`)
+    .send(body);
+}
+
+// ---- Conexões e configurações ----
+
+export async function listConnections(_req: Request, res: Response) {
+  res.json(await connections.listConnections());
+}
+
+export async function createConnection(req: Request, res: Response) {
+  const input = createConnectionSchema.parse(req.body ?? {});
+  res.status(201).json(await connections.createConnection(input, actor(req)));
+}
+
+export async function deleteConnection(req: Request<Params>, res: Response) {
+  await connections.deleteConnection(req.params.id);
+  res.status(204).end();
+}
+
+export async function testConnection(req: Request<Params>, res: Response) {
+  res.json(await connections.testConnection(req.params.id));
+}
+
+export async function settings(_req: Request, res: Response) {
+  res.json(await connections.settings());
 }
 
 // ---- Métricas ----

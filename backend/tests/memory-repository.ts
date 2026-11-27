@@ -1,15 +1,17 @@
 // Repositório em memória usado no lugar do PostgreSQL nos testes.
 import { randomUUID } from 'crypto';
-import type { Migration, MigrationEvent, MigrationUpdate, Role, Status, User } from '../src/repository';
+import type { Connection, Migration, MigrationEvent, MigrationUpdate, NewConnection, Role, Status, User } from '../src/repository';
 
 export const migrations = new Map<string, Migration>();
 export const events: MigrationEvent[] = [];
 export const users: User[] = [];
+export const connections: Connection[] = [];
 
 export function reset() {
   migrations.clear();
   events.length = 0;
   users.length = 0;
+  connections.length = 0;
 }
 
 export async function insertMigration(data: { name: string; source: object; target: object; status: Status }) {
@@ -83,3 +85,25 @@ export async function countUsers() {
 export async function ensureSchema() {}
 
 export async function ping() {}
+
+export async function insertConnection(data: NewConnection) {
+  const c: Connection = { id: randomUUID(), ...data, createdAt: new Date() };
+  connections.push(c);
+  return { ...c };
+}
+
+export async function listConnections() {
+  return connections.map((c) => ({ ...c }));
+}
+
+export async function findConnection(id: string) {
+  const c = connections.find((x) => x.id === id);
+  return c ? { ...c } : null;
+}
+
+export async function deleteConnection(id: string) {
+  const i = connections.findIndex((x) => x.id === id);
+  if (i < 0) return false;
+  connections.splice(i, 1);
+  return true;
+}

@@ -78,6 +78,22 @@ function toEvent(row: any): MigrationEvent {
   };
 }
 
+/** Conexão cadastrada pelo DBA. Não há senha: o DB Layer usa as credenciais configuradas nele. */
+export interface Connection {
+  id: string;
+  name: string;
+  role: 'source' | 'target';
+  engine: 'mysql' | 'oracle';
+  host: string;
+  port: number | null;
+  database: string;
+  username: string | null;
+  createdBy: string;
+  createdAt: Date;
+}
+
+export type NewConnection = Omit<Connection, 'id' | 'createdAt'>;
+
 export async function insertMigration(data: {
   name: string;
   source: object;
@@ -207,7 +223,61 @@ const SCHEMA_SQL = `
     role           TEXT NOT NULL CHECK (role IN ('DBA', 'DEV_QA')),
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  -- Credenciais da origem nunca foram usadas pelo DB Layer: remove as gravadas antes.
+  UPDATE migrations SET source = source - 'password' - 'user' WHERE source ? 'password' OR source ? 'user';
+  -- Conexões cadastradas pelo DBA (sem senha: o DB Layer usa as credenciais configuradas nele).
+  CREATE TABLE IF NOT EXISTS connections (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name        TEXT NOT NULL,
+    role        TEXT NOT NULL CHECK (role IN ('source', 'target')),
+    engine      TEXT NOT NULL CHECK (engine IN ('mysql', 'oracle')),
+    host        TEXT NOT NULL,
+    port        INTEGER,
+    database    TEXT NOT NULL,
+    username    TEXT,
+    created_by  TEXT NOT NULL,
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
 `;
+
+function toConnection(row: any): Connection {
+  return {
+    id: row.id,
+    name: row.name,
+    role: row.role,
+    engine: row.engine,
+    host: row.host,
+    port: row.port ?? null,
+    database: row.database,
+    username: row.username ?? null,
+    createdBy: row.created_by,
+    createdAt: row.created_at,
+  };
+}
+
+export async function insertConnection(data: NewConnection): Promise<Connection> {
+  const { rows } = await pool.query(
+    `INSERT INTO connections (name, role, engine, host, port, database, username, created_by)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+    [data.name, data.role, data.engine, data.host, data.port, data.database, data.username, data.createdBy],
+  );
+  return toConnection(rows[0]);
+}
+
+export async function listConnections(): Promise<Connection[]> {
+  const { rows } = await pool.query(`SELECT * FROM connections ORDER BY created_at`);
+  return rows.map(toConnection);
+}
+
+export async function findConnection(id: string): Promise<Connection | null> {
+  const { rows } = await pool.query(`SELECT * FROM connections WHERE id = $1`, [id]);
+  return rows[0] ? toConnection(rows[0]) : null;
+}
+
+export async function deleteConnection(id: string): Promise<boolean> {
+  const { rowCount } = await pool.query(`DELETE FROM connections WHERE id = $1`, [id]);
+  return (rowCount ?? 0) > 0;
+}
 
 export async function ping(): Promise<void> {
   await pool.query('SELECT 1');

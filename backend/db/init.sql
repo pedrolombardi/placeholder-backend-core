@@ -34,3 +34,19 @@ CREATE TABLE IF NOT EXISTS users (
   role           TEXT NOT NULL CHECK (role IN ('DBA', 'DEV_QA')),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Credenciais da origem nunca foram usadas pelo DB Layer: remove as gravadas antes.
+UPDATE migrations SET source = source - 'password' - 'user' WHERE source ? 'password' OR source ? 'user';
+-- Conexões cadastradas pelo DBA (sem senha: o DB Layer usa as credenciais configuradas nele).
+CREATE TABLE IF NOT EXISTS connections (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  role        TEXT NOT NULL CHECK (role IN ('source', 'target')),
+  engine      TEXT NOT NULL CHECK (engine IN ('mysql', 'oracle')),
+  host        TEXT NOT NULL,
+  port        INTEGER,
+  database    TEXT NOT NULL,
+  username    TEXT,
+  created_by  TEXT NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);

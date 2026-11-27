@@ -1,6 +1,7 @@
 import { logger } from './logger';
 import * as repo from './repository';
 import type { Migration, Status } from './repository';
+import { isParseableResolution, RESOLUTION_HINT } from './resolution';
 import type { CreateMigrationInput, Decision, Proposal } from './schemas';
 
 export class HttpError extends Error {
@@ -37,7 +38,9 @@ export function publicMigration(m: Migration) {
 export const SYSTEM_ACTOR = 'system';
 
 export async function createMigration(input: CreateMigrationInput, actor = SYSTEM_ACTOR): Promise<Migration> {
-  const migration = await repo.insertMigration({ ...input, status: 'CREATED' });
+  // Credenciais da origem não são gravadas: o DB Layer só confere tipo e database.
+  const { user: _user, password: _password, ...source } = input.source;
+  const migration = await repo.insertMigration({ name: input.name, source, target: input.target, status: 'CREATED' });
   await repo.insertEvent({ migrationId: migration.id, type: 'MIGRATION_CREATED', actor, toStatus: 'CREATED' });
   logger.info({ migrationId: migration.id, actor }, 'migration created');
   return migration;
@@ -87,6 +90,14 @@ export async function approve(id: string, decisions: Decision[] = [], actor = SY
   if (current.status !== 'WAITING_APPROVAL') {
     throw new HttpError(409, `Transição inválida: ${current.status} → APPROVED`);
   }
+  // Texto que o DB Layer não sabe aplicar seria trocado em silêncio pelo tipo do destino.
+  const unparseable = decisions.filter((d) => !isParseableResolution(d.resolution));
+  if (unparseable.length > 0) {
+    throw new HttpError(
+      400,
+      `Resolução que o DB Layer não sabe aplicar em: ${unparseable.map((d) => d.conflictId).join(', ')} (${RESOLUTION_HINT})`,
+    );
+  }
 
   const proposal = current.proposal as Proposal;
   const unknown = decisions.filter((d) => !proposal.conflicts.some((c) => c.id === d.conflictId));
@@ -123,3 +134,13 @@ export const listEvents = async (id: string) => {
   await getMigration(id);
   return repo.listEvents(id);
 };
+
+/** Script de migração gerado pelo DB Layer na execução, quando houver. */
+export async function migrationScript(id: string): Promise<string> {
+  const m = await getMigration(id);
+  const script = (m.result as { apply?: { script?: unknown } } | null)?.apply?.script;
+  if (typeof script !== 'string' || script.length === 0) {
+    throw new HttpError(404, 'Script de migração indisponível para esta migração');
+  }
+  return script;
+}

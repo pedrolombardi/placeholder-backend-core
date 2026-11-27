@@ -23,7 +23,7 @@ declare module 'express-serve-static-core' {
 /** Lido a cada requisição para os testes poderem ligar e desligar. */
 export const authEnabled = () => process.env.AUTH_ENABLED === 'true';
 
-const TOKEN_TTL = process.env.JWT_EXPIRES_IN ?? '8h';
+export const TOKEN_TTL = process.env.JWT_EXPIRES_IN ?? '8h';
 
 // Sem JWT_SECRET o segredo é gerado no boot: os tokens deixam de valer quando o processo reinicia.
 let generatedSecret: string | undefined;
