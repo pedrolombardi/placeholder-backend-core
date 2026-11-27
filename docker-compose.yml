@@ -35,6 +35,10 @@ services:
       DATA_LAYER_URL: http://mocks:4003
       HTTP_TIMEOUT_MS: 3000
       HTTP_RETRIES: 2
+      # Login + perfis (RBAC). Na plataforma fica desligado até o front mandar o token.
+      AUTH_ENABLED: "true"
+      JWT_SECRET: segredo-de-demonstracao-troque-em-producao
+      AUTH_SEED_USERS: dba:dba123:DBA,qa:qa123:DEV_QA
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:

@@ -1,9 +1,24 @@
 ### Roteiro de demonstração (REST Client do VS Code, ou copie para curl)
 @base = http://localhost:3000
 
+### 0. Login (AUTH_ENABLED=true no compose do Core). Usuários de demonstração: dba/dba123 (DBA) e qa/qa123 (DEV_QA)
+# @name login
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "dba", "password": "dba123" }
+
+###
+@token = {{login.response.body.token}}
+
+### 0b. Quem sou eu
+GET {{base}}/auth/me
+Authorization: Bearer {{token}}
+
 ### 1. Criar migração (credenciais fictícias)
 # @name create
 POST {{base}}/migrations
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -17,12 +32,15 @@ Content-Type: application/json
 
 ### 2. Iniciar análise (202, roda em background)
 POST {{base}}/migrations/{{id}}/analyze
+Authorization: Bearer {{token}}
 
 ### 3. Consultar até WAITING_APPROVAL (proposta com os conflitos e quem decidiu cada um)
 GET {{base}}/migrations/{{id}}
+Authorization: Bearer {{token}}
 
 ### 4a. Aprovar a proposta, decidindo o conflito que a IA devolveu como DEFER
 POST {{base}}/migrations/{{id}}/approve
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 {
@@ -33,21 +51,48 @@ Content-Type: application/json
 
 ### 4b. (alternativa) Aprovar sem decidir o DEFER (422, continua em WAITING_APPROVAL)
 POST {{base}}/migrations/{{id}}/approve
+Authorization: Bearer {{token}}
 
 ### 4c. (alternativa) Rejeitar a proposta
 POST {{base}}/migrations/{{id}}/reject
+Authorization: Bearer {{token}}
 Content-Type: application/json
 
 { "reason": "Mapeamento de pedidos incorreto" }
 
 ### 5. Executar (202, roda em background)
 POST {{base}}/migrations/{{id}}/execute
+Authorization: Bearer {{token}}
 
 ### 6. Consultar até COMPLETED
 GET {{base}}/migrations/{{id}}
+Authorization: Bearer {{token}}
 
 ### 7. Trilha de auditoria
 GET {{base}}/migrations/{{id}}/events
+Authorization: Bearer {{token}}
 
 ### Transição inválida (409): executar sem aprovação (rode logo após o passo 1)
 POST {{base}}/migrations/{{id}}/execute
+Authorization: Bearer {{token}}
+
+### Métricas do Dashboard (status, taxa de sucesso, conflitos por quem decidiu, duração das etapas)
+GET {{base}}/metrics
+Authorization: Bearer {{token}}
+
+### RBAC: login como DEV_QA
+# @name loginQa
+POST {{base}}/auth/login
+Content-Type: application/json
+
+{ "username": "qa", "password": "qa123" }
+
+### RBAC: DEV_QA tentando aprovar (403, a homologação é do DBA)
+POST {{base}}/migrations/{{id}}/approve
+Authorization: Bearer {{loginQa.response.body.token}}
+Content-Type: application/json
+
+{ "decisions": [] }
+
+### Sem token (401)
+GET {{base}}/migrations

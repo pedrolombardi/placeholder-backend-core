@@ -7,6 +7,8 @@
     "demo:reject": "node scripts/demo.mjs reject",
     "demo:invalid": "node scripts/demo.mjs invalid",
     "demo:deferred": "node scripts/demo.mjs deferred",
+    "demo:rbac": "node scripts/demo.mjs rbac",
+    "metrics": "node scripts/demo.mjs metrics",
     "mocks:fail:ai": "node scripts/mocks.mjs ai",
     "mocks:fail:db": "node scripts/mocks.mjs db",
     "mocks:fail:data": "node scripts/mocks.mjs data",

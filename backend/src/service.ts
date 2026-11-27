@@ -33,10 +33,13 @@ export function publicMigration(m: Migration) {
   return { ...m, source };
 }
 
-export async function createMigration(input: CreateMigrationInput): Promise<Migration> {
+/** Autor gravado na auditoria quando a ação vem do processamento em background. */
+export const SYSTEM_ACTOR = 'system';
+
+export async function createMigration(input: CreateMigrationInput, actor = SYSTEM_ACTOR): Promise<Migration> {
   const migration = await repo.insertMigration({ ...input, status: 'CREATED' });
-  await repo.insertEvent({ migrationId: migration.id, type: 'MIGRATION_CREATED', toStatus: 'CREATED' });
-  logger.info({ migrationId: migration.id }, 'migration created');
+  await repo.insertEvent({ migrationId: migration.id, type: 'MIGRATION_CREATED', actor, toStatus: 'CREATED' });
+  logger.info({ migrationId: migration.id, actor }, 'migration created');
   return migration;
 }
 
@@ -51,6 +54,7 @@ export async function changeStatus(
   to: Status,
   patch: Omit<repo.MigrationUpdate, 'status'> = {},
   eventPayload?: object,
+  actor = SYSTEM_ACTOR,
 ): Promise<Migration> {
   const current = await getMigration(id);
   const from = current.status;
@@ -59,26 +63,26 @@ export async function changeStatus(
   }
 
   const updated = await repo.updateMigration(id, { ...patch, status: to });
-  await repo.insertEvent({ migrationId: id, type: 'STATUS_CHANGED', fromStatus: from, toStatus: to });
+  await repo.insertEvent({ migrationId: id, type: 'STATUS_CHANGED', actor, fromStatus: from, toStatus: to });
   const businessEvent = businessEvents[to];
   if (businessEvent) {
-    await repo.insertEvent({ migrationId: id, type: businessEvent, fromStatus: from, toStatus: to, payload: eventPayload });
+    await repo.insertEvent({ migrationId: id, type: businessEvent, actor, fromStatus: from, toStatus: to, payload: eventPayload });
   }
-  logger.info({ migrationId: id, from, to }, 'status changed');
+  logger.info({ migrationId: id, from, to, actor }, 'status changed');
   return updated;
 }
 
 /** Evento de etapa, sem mudança de status. */
-export const recordEvent = (id: string, type: string, payload?: object) =>
-  repo.insertEvent({ migrationId: id, type, payload });
+export const recordEvent = (id: string, type: string, payload?: object, actor = SYSTEM_ACTOR) =>
+  repo.insertEvent({ migrationId: id, type, actor, payload });
 
-export const startAnalysis = (id: string) => changeStatus(id, 'ANALYZING');
+export const startAnalysis = (id: string, actor = SYSTEM_ACTOR) => changeStatus(id, 'ANALYZING', {}, undefined, actor);
 
 /**
  * Homologação: todo conflito que a IA devolveu como DEFER precisa de uma decisão humana.
  * As decisões ficam gravadas na proposta e no evento de aprovação.
  */
-export async function approve(id: string, decisions: Decision[] = []): Promise<Migration> {
+export async function approve(id: string, decisions: Decision[] = [], actor = SYSTEM_ACTOR): Promise<Migration> {
   const current = await getMigration(id);
   if (current.status !== 'WAITING_APPROVAL') {
     throw new HttpError(409, `Transição inválida: ${current.status} → APPROVED`);
@@ -93,7 +97,7 @@ export async function approve(id: string, decisions: Decision[] = []): Promise<M
   const conflicts = proposal.conflicts.map((c) => {
     const decision = decisions.find((d) => d.conflictId === c.id);
     return decision
-      ? { ...c, status: 'RESOLVED' as const, decidedBy: 'human' as const, resolution: decision.resolution }
+      ? { ...c, status: 'RESOLVED' as const, decidedBy: 'human' as const, decidedByUser: actor, resolution: decision.resolution }
       : c;
   });
   const pending = conflicts.filter((c) => c.status === 'DEFERRED');
@@ -101,12 +105,18 @@ export async function approve(id: string, decisions: Decision[] = []): Promise<M
     throw new HttpError(422, `Decisão humana pendente para: ${pending.map((c) => c.id).join(', ')}`);
   }
 
-  return changeStatus(id, 'APPROVED', { proposal: { ...proposal, conflicts, pendingDecisions: 0 } }, { decisions });
+  return changeStatus(
+    id,
+    'APPROVED',
+    { proposal: { ...proposal, conflicts, pendingDecisions: 0 } },
+    { decisions, approvedBy: actor },
+    actor,
+  );
 }
 
-export const reject = (id: string, reason?: string) =>
-  changeStatus(id, 'REJECTED', {}, { reason: reason ?? null });
-export const startExecution = (id: string) => changeStatus(id, 'EXECUTING');
+export const reject = (id: string, reason?: string, actor = SYSTEM_ACTOR) =>
+  changeStatus(id, 'REJECTED', {}, { reason: reason ?? null, rejectedBy: actor }, actor);
+export const startExecution = (id: string, actor = SYSTEM_ACTOR) => changeStatus(id, 'EXECUTING', {}, undefined, actor);
 
 export const listMigrations = () => repo.listMigrations();
 export const listEvents = async (id: string) => {

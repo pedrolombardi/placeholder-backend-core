@@ -1,13 +1,15 @@
 // Repositório em memória usado no lugar do PostgreSQL nos testes.
 import { randomUUID } from 'crypto';
-import type { Migration, MigrationEvent, MigrationUpdate, Status } from '../src/repository';
+import type { Migration, MigrationEvent, MigrationUpdate, Role, Status, User } from '../src/repository';
 
 export const migrations = new Map<string, Migration>();
 export const events: MigrationEvent[] = [];
+export const users: User[] = [];
 
 export function reset() {
   migrations.clear();
   events.length = 0;
+  users.length = 0;
 }
 
 export async function insertMigration(data: { name: string; source: object; target: object; status: Status }) {
@@ -43,11 +45,12 @@ export async function updateMigration(id: string, fields: MigrationUpdate) {
   return { ...m };
 }
 
-export async function insertEvent(e: { migrationId: string; type: string; fromStatus?: Status | null; toStatus?: Status | null; payload?: unknown }) {
+export async function insertEvent(e: { migrationId: string; type: string; actor?: string | null; fromStatus?: Status | null; toStatus?: Status | null; payload?: unknown }) {
   events.push({
     id: events.length + 1,
     migrationId: e.migrationId,
     type: e.type,
+    actor: e.actor ?? null,
     fromStatus: e.fromStatus ?? null,
     toStatus: e.toStatus ?? null,
     payload: e.payload ?? null,
@@ -58,5 +61,25 @@ export async function insertEvent(e: { migrationId: string; type: string; fromSt
 export async function listEvents(migrationId: string) {
   return events.filter((e) => e.migrationId === migrationId);
 }
+
+export async function listAllEvents() {
+  return [...events];
+}
+
+export async function findUserByUsername(username: string) {
+  return users.find((u) => u.username === username) ?? null;
+}
+
+export async function insertUser(data: { username: string; passwordHash: string; role: Role }) {
+  const u: User = { id: users.length + 1, ...data, createdAt: new Date() };
+  users.push(u);
+  return u;
+}
+
+export async function countUsers() {
+  return users.length;
+}
+
+export async function ensureSchema() {}
 
 export async function ping() {}

@@ -132,15 +132,17 @@ test('DEFER da IA: a decisão humana fica registrada na proposta e no evento', a
   const id = await analyzed();
   const decisions = [{ conflictId: 'nome', resolution: 'Truncar em 200' }];
 
-  const m = await service.approve(id, decisions);
+  const m = await service.approve(id, decisions, 'dba');
   expect(m.status).toBe('APPROVED');
   expect((m.proposal as Proposal).conflicts[1]).toMatchObject({
     status: 'RESOLVED',
     decidedBy: 'human',
+    decidedByUser: 'dba',
     resolution: 'Truncar em 200',
   });
   const approved = memory.events.find((e) => e.type === 'PROPOSAL_APPROVED');
-  expect(approved?.payload).toEqual({ decisions });
+  expect(approved?.payload).toEqual({ decisions, approvedBy: 'dba' });
+  expect(approved?.actor).toBe('dba');
 });
 
 test('decisão para um conflito que não existe retorna 400', async () => {

@@ -24,6 +24,8 @@ export const approveSchema = z.object({ decisions: z.array(decision).default([])
 
 export const rejectSchema = z.object({ reason: z.string().optional() }).default({});
 
+export const loginSchema = z.object({ username: z.string().min(1), password: z.string().min(1) });
+
 // ---- Respostas do DB Layer ----
 
 export const connectionTestResponse = z.object({
@@ -150,6 +152,8 @@ export const dataLayerAnonymizeResponse = z.object({
 export interface PlannedConflict extends Conflict {
   status: 'RESOLVED' | 'DEFERRED';
   decidedBy: 'rule' | 'ai' | 'human' | null;
+  /** usuário que decidiu, quando decidedBy = human */
+  decidedByUser?: string;
   resolution?: string;
   justification?: string;
   evidence?: string[];
