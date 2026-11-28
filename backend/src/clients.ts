@@ -210,13 +210,17 @@ export const dataLayer = {
       .filter((v): v is number => typeof v === 'number');
     return {
       datasetId: r.run_id,
-      tables: r.dataset.tables.map((t) => ({
-        name: t.name,
-        rows: t.rows.length,
-        anonymizedColumns: r.report.columns
+      tables: r.dataset.tables.map((t) => {
+        const anonymized = r.report.columns
           .filter((c) => c.column.startsWith(`${t.name}.`) && c.strategy !== 'keep')
-          .map((c) => c.column.slice(t.name.length + 1)),
-      })),
+          .map((c) => [c.column.slice(t.name.length + 1), c.strategy] as const);
+        return {
+          name: t.name,
+          rows: t.rows.length,
+          anonymizedColumns: anonymized.map(([column]) => column),
+          strategies: Object.fromEntries(anonymized),
+        };
+      }),
       fidelity: tvds.length > 0 ? Number((1 - tvds.reduce((a, b) => a + b, 0) / tvds.length).toFixed(4)) : 1,
       verdict: r.report.verdict,
       dataset: r.dataset,

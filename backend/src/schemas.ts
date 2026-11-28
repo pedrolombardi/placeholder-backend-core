@@ -108,7 +108,15 @@ export const analyzeConflictResponse = z.object({
 
 export const anonymizeResponse = z.object({
   datasetId: z.string(),
-  tables: z.array(z.object({ name: z.string(), rows: z.number(), anonymizedColumns: z.array(z.string()) })),
+  tables: z.array(
+    z.object({
+      name: z.string(),
+      rows: z.number(),
+      anonymizedColumns: z.array(z.string()),
+      /** coluna -> estrategia do Data Layer (opcional: migracoes antigas nao tem) */
+      strategies: z.record(z.string()).optional(),
+    }),
+  ),
   fidelity: z.number(),
   verdict: z.string().optional(),
   /** dataset anonimizado: vai para a validacao no sandbox do DB Layer */
