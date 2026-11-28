@@ -130,7 +130,7 @@ test('DEFER da IA: aprovar sem decisão humana retorna 422', async () => {
 test('DEFER da IA: a decisão humana fica registrada na proposta e no evento', async () => {
   jest.mocked(aiLayer.chat).mockResolvedValue(defer);
   const id = await analyzed();
-  const decisions = [{ conflictId: 'nome', resolution: 'Truncar em 200' }];
+  const decisions = [{ conflictId: 'nome', resolution: 'Truncar em VARCHAR2(200 CHAR)' }];
 
   const m = await service.approve(id, decisions, 'dba');
   expect(m.status).toBe('APPROVED');
@@ -138,7 +138,7 @@ test('DEFER da IA: a decisão humana fica registrada na proposta e no evento', a
     status: 'RESOLVED',
     decidedBy: 'human',
     decidedByUser: 'dba',
-    resolution: 'Truncar em 200',
+    resolution: 'Truncar em VARCHAR2(200 CHAR)',
   });
   const approved = memory.events.find((e) => e.type === 'PROPOSAL_APPROVED');
   expect(approved?.payload).toEqual({ decisions, approvedBy: 'dba' });

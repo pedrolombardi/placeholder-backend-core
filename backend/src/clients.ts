@@ -9,14 +9,16 @@ import {
   applyPlanResponse,
   Conflict,
   connectionTestResponse,
+  DbHealth,
+  dbHealthResponse,
   diffResponse,
   introspectResponse,
   validatePlanResponse,
 } from './schemas';
 
-const AI_LAYER_URL = process.env.AI_LAYER_URL ?? 'http://localhost:4001';
-const DB_LAYER_URL = process.env.DB_LAYER_URL ?? 'http://localhost:4002';
-const DATA_LAYER_URL = process.env.DATA_LAYER_URL ?? 'http://localhost:4003';
+export const AI_LAYER_URL = process.env.AI_LAYER_URL ?? 'http://localhost:4001';
+export const DB_LAYER_URL = process.env.DB_LAYER_URL ?? 'http://localhost:4002';
+export const DATA_LAYER_URL = process.env.DATA_LAYER_URL ?? 'http://localhost:4003';
 const TIMEOUT_MS = Number(process.env.HTTP_TIMEOUT_MS ?? 3000);
 const RETRIES = Number(process.env.HTTP_RETRIES ?? 2);
 
@@ -95,6 +97,49 @@ export async function httpCall<T>(
   throw lastError!;
 }
 
+/** Health checks respondem a telas: nunca esperam mais de 2 s, sem retry. */
+const HEALTH_TIMEOUT_MS = Math.min(Number(process.env.HEALTH_TIMEOUT_MS ?? 2000), 2000);
+
+export interface HealthProbe {
+  /** respondeu 2xx */
+  healthy: boolean;
+  /** status HTTP; null quando não houve resposta */
+  status: number | null;
+  /** corpo JSON da resposta, quando houver */
+  body: unknown;
+  /** motivo quando não está saudável */
+  detail: string | null;
+  latencyMs: number | null;
+}
+
+/** GET de health com timeout curto e sem retry; um 5xx com corpo ainda devolve o corpo. */
+export async function probeHealth(url: string): Promise<HealthProbe> {
+  const started = Date.now();
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(HEALTH_TIMEOUT_MS) });
+    const latencyMs = Date.now() - started;
+    const body = await res.json().catch(() => null);
+    return { healthy: res.ok, status: res.status, body, detail: res.ok ? null : `HTTP ${res.status}`, latencyMs };
+  } catch (err) {
+    const timedOut = err instanceof Error && err.name === 'TimeoutError';
+    return {
+      healthy: false,
+      status: null,
+      body: null,
+      detail: timedOut ? `sem resposta em ${HEALTH_TIMEOUT_MS}ms` : 'serviço indisponível',
+      latencyMs: null,
+    };
+  }
+}
+
+/** Conexões vivas do DB Layer (GET /health/db); `source`/`target` como o DB Layer devolve. */
+export async function dbLayerHealth(): Promise<{ probe: HealthProbe; health: DbHealth | null }> {
+  const probe = await probeHealth(`${DB_LAYER_URL}/health/db`);
+  const parsed = dbHealthResponse.safeParse(probe.body);
+  return { probe, health: parsed.success ? parsed.data : null };
+}
+
+
 const post = <T>(service: string, url: string, body: unknown, schema: z.ZodType<T, z.ZodTypeDef, unknown>) =>
   httpCall(service, 'POST', url, body, schema);
 
@@ -165,13 +210,17 @@ export const dataLayer = {
       .filter((v): v is number => typeof v === 'number');
     return {
       datasetId: r.run_id,
-      tables: r.dataset.tables.map((t) => ({
-        name: t.name,
-        rows: t.rows.length,
-        anonymizedColumns: r.report.columns
+      tables: r.dataset.tables.map((t) => {
+        const anonymized = r.report.columns
           .filter((c) => c.column.startsWith(`${t.name}.`) && c.strategy !== 'keep')
-          .map((c) => c.column.slice(t.name.length + 1)),
-      })),
+          .map((c) => [c.column.slice(t.name.length + 1), c.strategy] as const);
+        return {
+          name: t.name,
+          rows: t.rows.length,
+          anonymizedColumns: anonymized.map(([column]) => column),
+          strategies: Object.fromEntries(anonymized),
+        };
+      }),
       fidelity: tvds.length > 0 ? Number((1 - tvds.reduce((a, b) => a + b, 0) / tvds.length).toFixed(4)) : 1,
       verdict: r.report.verdict,
       dataset: r.dataset,

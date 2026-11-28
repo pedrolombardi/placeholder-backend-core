@@ -20,6 +20,7 @@ function anonymized(verdict: 'pass' | 'fail') {
       columns: [
         { column: 'clientes.id', strategy: 'mint_key', total_variation_distance: 0 },
         { column: 'clientes.email', strategy: 'pseudonymize_local_part', total_variation_distance: 0.1 },
+        { column: 'clientes.ativo', strategy: 'keep', total_variation_distance: 0.05 },
       ],
       checks: [{ check: 'leakage', verdict }],
     },
@@ -44,7 +45,14 @@ test('extrai no DB Layer, anonimiza no Data Layer e resume para a proposta', asy
 
   expect(r).toMatchObject({
     datasetId: 'run-1',
-    tables: [{ name: 'clientes', rows: 2, anonymizedColumns: ['id', 'email'] }],
+    tables: [
+      {
+        name: 'clientes',
+        rows: 2,
+        anonymizedColumns: ['id', 'email'],
+        strategies: { id: 'mint_key', email: 'pseudonymize_local_part' },
+      },
+    ],
     fidelity: 0.95,
     verdict: 'pass',
   });

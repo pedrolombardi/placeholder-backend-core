@@ -82,14 +82,20 @@ O DB Layer usa o driver oficial `node-oracledb` (modo thin).
 | `GET /health` | público | `{ status, auth }`: se o banco responde e se a autenticação está ligada |
 | `POST /auth/login` | público | `{ username, password }` → `{ token, tokenType, expiresIn, user }` |
 | `GET /auth/me` | qualquer | usuário do token |
-| `POST /migrations` | qualquer | cria a migração (`CREATED`); destino `oracle` ou `postgres` |
+| `POST /migrations` | qualquer | cria a migração (`CREATED`); `source.user`/`password` são opcionais e nunca gravados (quem conecta é o DB Layer) |
 | `GET /migrations`, `GET /migrations/:id` | qualquer | consulta, sem usuário e senha da origem |
 | `POST /migrations/:id/analyze` | qualquer | inicia a análise (202, em background) |
-| `POST /migrations/:id/approve` | **DBA** | aprova; corpo opcional `{ "decisions": [{ "conflictId", "resolution" }] }` |
+| `POST /migrations/:id/approve` | **DBA** | aprova; corpo opcional `{ "decisions": [{ "conflictId", "resolution" }] }`. A resolução precisa citar um tipo Oracle ou a decisão sobre valores inválidos (NULL ou uma data AAAA-MM-DD), senão `400` |
 | `POST /migrations/:id/reject` | **DBA** | rejeita; corpo opcional `{ "reason" }` |
 | `POST /migrations/:id/execute` | **DBA** | inicia a execução (202, em background) |
 | `GET /migrations/:id/events` | qualquer | trilha de auditoria, com o autor (`actor`) de cada evento |
 | `GET /metrics` | qualquer | métricas do Dashboard (abaixo) |
+| `GET /migrations/:id/script` | qualquer | script de migração gerado, `text/plain` (anexo `migracao-<id8>.sql`) |
+| `GET /connections` | qualquer | `{ live, saved }`: origem e destino vivos do DB Layer (`/health/db`) e as conexões cadastradas |
+| `POST /connections` | **DBA** | cadastra `{ name, role, engine, host, port?, database, username? }` (sem senha; origem mysql, destino oracle) |
+| `DELETE /connections/:id` | **DBA** | remove uma conexão cadastrada |
+| `POST /connections/:id/test` | qualquer | `{ ok, detail, latencyMs }`: confere a conexão cadastrada com a conexão viva do DB Layer |
+| `GET /settings` | qualquer | `{ authEnabled, tokenTtl, layers }`: saúde do DB Layer, da AI Layer e do Data Layer |
 
 Respostas de erro: `400` dados inválidos ou conflito inexistente, `401` sem token ou token inválido, `403` perfil sem permissão (por exemplo, DEV_QA aprovando), `404` migração não encontrada, `409` transição inválida (por exemplo, executar sem aprovação), `422` decisão humana pendente.
 

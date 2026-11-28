@@ -8,8 +8,10 @@ export const createMigrationSchema = z.object({
     type: z.enum(['mysql', 'oracle', 'sqlserver', 'postgres']),
     host: z.string().min(1),
     database: z.string().min(1),
-    user: z.string().min(1),
-    password: z.string(),
+    // aceitos por compatibilidade e descartados antes de gravar: o DB Layer usa
+    // a conexão configurada nele e só confere tipo e database
+    user: z.string().optional(),
+    password: z.string().optional(),
   }),
   target: z.object({
     type: z.enum(['oracle', 'postgres']),
@@ -106,7 +108,15 @@ export const analyzeConflictResponse = z.object({
 
 export const anonymizeResponse = z.object({
   datasetId: z.string(),
-  tables: z.array(z.object({ name: z.string(), rows: z.number(), anonymizedColumns: z.array(z.string()) })),
+  tables: z.array(
+    z.object({
+      name: z.string(),
+      rows: z.number(),
+      anonymizedColumns: z.array(z.string()),
+      /** coluna -> estrategia do Data Layer (opcional: migracoes antigas nao tem) */
+      strategies: z.record(z.string()).optional(),
+    }),
+  ),
   fidelity: z.number(),
   verdict: z.string().optional(),
   /** dataset anonimizado: vai para a validacao no sandbox do DB Layer */
@@ -166,3 +176,37 @@ export interface Proposal {
   conflicts: PlannedConflict[];
   pendingDecisions: number;
 }
+
+// ---- Conexões salvas (cadastro; sem senha) ----
+
+const ENGINE_BY_ROLE = { source: 'mysql', target: 'oracle' } as const;
+
+export const createConnectionSchema = z
+  .object({
+    name: z.string().min(1),
+    role: z.enum(['source', 'target']),
+    engine: z.enum(['mysql', 'oracle']),
+    host: z.string().min(1),
+    port: z.number().int().min(1).max(65535).nullable().optional(),
+    database: z.string().min(1),
+    username: z.string().min(1).nullable().optional(),
+  })
+  .superRefine((c, ctx) => {
+    if (ENGINE_BY_ROLE[c.role] !== c.engine) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['engine'],
+        message: `engine de uma conexão ${c.role} deve ser ${ENGINE_BY_ROLE[c.role]} (a plataforma migra MySQL → Oracle)`,
+      });
+    }
+  });
+export type CreateConnectionInput = z.infer<typeof createConnectionSchema>;
+
+/** DB Layer: GET /health/db. `source` e `target` são repassados como vieram. */
+const healthSide = z.object({ connected: z.boolean() }).passthrough();
+export const dbHealthResponse = z.object({
+  status: z.string(),
+  source: healthSide,
+  target: healthSide,
+});
+export type DbHealth = z.infer<typeof dbHealthResponse>;
